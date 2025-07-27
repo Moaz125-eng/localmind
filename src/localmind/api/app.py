@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
+from localmind.api.analysis import build_analysis_router
 from localmind.api.indexing import build_indexing_router
 from localmind.core.logging import configure_logging, health_payload
 from localmind.core.settings import Settings
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(
         build_indexing_router(IndexingRouterFactory(database, settings.exclude_patterns))
     )
+    app.include_router(build_analysis_router(database))
 
     @app.get("/health")
     async def health() -> dict[str, str]:
