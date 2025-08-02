@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from localmind.api.analysis import build_analysis_router
+from localmind.api.chat import build_chat_router
 from localmind.api.embeddings import build_embedding_router
 from localmind.api.indexing import build_indexing_router
 from localmind.api.search import build_search_router
