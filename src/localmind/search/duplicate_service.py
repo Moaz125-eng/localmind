@@ -1,9 +1,7 @@
 import json
-from pathlib import Path
-
-import numpy as np
 
 from localmind.core.settings import Settings
+from localmind.embeddings.encoder import SentenceTransformerEncoder
 from localmind.embeddings.store import FaissVectorStore
 from localmind.search.duplicates import DuplicatePair
 
@@ -12,19 +10,11 @@ class DuplicateDetector:
     def __init__(self, settings: Settings, threshold: float = 0.88) -> None:
         self.settings = settings
         self.threshold = threshold
+        encoder = SentenceTransformerEncoder(settings.embedding_model)
         self.vector_store = FaissVectorStore(
             settings.data_dir / "vectors" / "symbols.faiss",
-            dimension=self._load_dimension(settings),
+            dimension=encoder.dimension,
         )
-
-    def _load_dimension(self, settings: Settings) -> int:
-        metadata_path = settings.data_dir / "vectors" / "symbols.meta.json"
-        if metadata_path.exists():
-            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-            records = payload.get("records", [])
-            if records:
-                return len(self.vector_store.index.reconstruct(0)) if False else 384
-        return 384
 
     def find_duplicates(self, repository_id: int | None = None, limit: int = 50) -> list[DuplicatePair]:
         records = self.vector_store.metadata
