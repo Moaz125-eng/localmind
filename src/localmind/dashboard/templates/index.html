@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ service_name }} Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --accent: #38bdf8;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --border: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: linear-gradient(180deg, #020617, #0f172a);
+      color: var(--text);
+    }
+    header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      padding: 24px 32px;
+    }
+    .panel {
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    h1, h2 { margin: 0 0 12px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input, textarea, button, select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #020617;
+      color: var(--text);
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    button {
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .metric {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 320px;
+      overflow: auto;
+      background: #020617;
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid var(--border);
+    }
+    .results li {
+      list-style: none;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .score { color: var(--accent); font-weight: 600; }
+    @media (max-width: 960px) {
+      main { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>{{ service_name }}</h1>
+      <p style="color: var(--muted); margin: 0;">Local codebase intelligence dashboard</p>
+    </div>
+    <div style="text-align: right; color: var(--muted); font-size: 13px;">
+      <div>Embedding: {{ embedding_model }}</div>
+      <div>LLM: {{ ollama_model }}</div>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Repository</h2>
+      <label for="repo-name">Name</label>
+      <input id="repo-name" placeholder="my-service">
+      <label for="repo-path">Path</label>
+      <input id="repo-path" placeholder="/path/to/repo">
+      <button id="register-btn">Register & Index</button>
+      <label for="repo-id">Repository ID</label>
+      <input id="repo-id" placeholder="1">
+      <button id="embed-btn">Build Embeddings</button>
+      <h2>Semantic Search</h2>
+      <input id="search-query" placeholder="Where is JWT auth implemented?">
+      <button id="search-btn">Search</button>
+      <h2>Repository Chat</h2>
+      <textarea id="chat-question" rows="4" placeholder="Explain websocket handling"></textarea>
+      <button id="chat-btn">Ask</button>
+    </section>
+    <section class="panel">
+      <div class="grid">
+        <div>
+          <div class="metric" id="metric-files">0</div>
+          <div style="color: var(--muted);">Indexed files</div>
+        </div>
+        <div>
+          <div class="metric" id="metric-results">0</div>
+          <div style="color: var(--muted);">Search hits</div>
+        </div>
+      </div>
+      <h2>Indexing Progress</h2>
+      <div class="log" id="progress-log">Waiting for indexing events...</div>
+      <h2>Search Results</h2>
+      <ul class="results" id="search-results"></ul>
+      <h2>Chat Response</h2>
+      <div class="log" id="chat-response"></div>
+    </section>
+  </main>
+  <script>
+    const progressLog = document.getElementById("progress-log");
+    const searchResults = document.getElementById("search-results");
+    const chatResponse = document.getElementById("chat-response");
+    const metricFiles = document.getElementById("metric-files");
+    const metricResults = document.getElementById("metric-results");
+    let progressSocket = null;
+
+    function appendProgress(message) {
+      progressLog.textContent = `${progressLog.textContent}\n${message}`.trim();
+    }
+
+    function connectProgress(repositoryId) {
+      if (progressSocket) {
+        progressSocket.close();
+      }
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      progressSocket = new WebSocket(`${protocol}://${window.location.host}/ws/indexing/${repositoryId}`);
+      progressSocket.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        appendProgress(`${payload.stage}: ${payload.message} (${payload.processed}/${payload.total})`);
+      };
+    }
+
+    async function postJson(url, body) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      return response.json();
+    }
+
+    document.getElementById("register-btn").addEventListener("click", async () => {
+      const name = document.getElementById("repo-name").value;
+      const root_path = document.getElementById("repo-path").value;
+      const repo = await postJson("/repositories", { name, root_path });
+      document.getElementById("repo-id").value = repo.id;
+      connectProgress(repo.id);
+      const indexed = await postJson(`/repositories/${repo.id}/index`, { incremental: false });
+      metricFiles.textContent = indexed.repository.file_count;
+      appendProgress(`Indexed ${indexed.stats.indexed} files`);
+    });
+
+    document.getElementById("embed-btn").addEventListener("click", async () => {
+      const repositoryId = Number(document.getElementById("repo-id").value);
+      const result = await postJson(`/embeddings/repositories/${repositoryId}`, {});
+      appendProgress(`Embedded ${result.embedded} symbols (${result.cached} cached)`);
+    });
+
+    document.getElementById("search-btn").addEventListener("click", async () => {
+      const query = document.getElementById("search-query").value;
+      const repositoryId = Number(document.getElementById("repo-id").value);
+      const result = await postJson("/search", { query, repository_id: repositoryId || null, limit: 8 });
+      metricResults.textContent = result.count;
+      searchResults.innerHTML = result.results.map((item) => (
+        `<li><span class="score">${item.score.toFixed(2)}</span> ${item.file_path}:${item.start_line}<br>${item.snippet}</li>`
+      )).join("");
+    });
+
+    document.getElementById("chat-btn").addEventListener("click", async () => {
+      const question = document.getElementById("chat-question").value;
+      const repositoryId = Number(document.getElementById("repo-id").value);
+      const result = await postJson("/chat", { question, repository_id: repositoryId || null, history: [] });
+      chatResponse.textContent = result.answer;
+    });
+  </script>
+</body>
+</html>

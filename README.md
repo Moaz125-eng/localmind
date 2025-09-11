@@ -31,22 +31,90 @@ cp .env.example .env
 uvicorn localmind.api.app:create_app --factory --reload
 ```
 
+Open `http://localhost:8000/` for the dashboard.
+
 Health check: `GET http://localhost:8000/health`
 
-## Project Layout
+## Indexing Workflow
+
+```bash
+python scripts/index_repo.py my-app /path/to/repo --embed
+```
+
+Or use the API:
+
+```bash
+curl -X POST http://localhost:8000/repositories \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"my-app","root_path":"/path/to/repo"}'
+
+curl -X POST http://localhost:8000/repositories/1/index \
+  -H 'Content-Type: application/json' \
+  -d '{"incremental":true}'
+
+curl -X POST http://localhost:8000/embeddings/repositories/1
+```
+
+## RAG Pipeline
+
+1. Index repository files and extract symbols
+2. Embed functions/classes with sentence-transformers
+3. Retrieve top matching snippets for a question
+4. Assemble prompt context and stream answer from Ollama
+
+Example chat request:
+
+```bash
+curl -X POST http://localhost:8000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Where is websocket logic implemented?","repository_id":1}'
+```
+
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for module boundaries and runtime topology.
 
 ```
-src/localmind/
-├── api/           HTTP routes and application factory
-├── core/          Settings, logging, shared utilities
-├── indexing/      Repository scanning and metadata storage
-├── parsers/       AST and tree-sitter analysis
-├── embeddings/    Local embedding generation and FAISS storage
-├── search/        Semantic search over indexed code
-├── rag/           Retrieval-augmented generation with Ollama
-├── visualization/ Architecture and dependency graphs
-└── dashboard/     Web UI templates and static assets
+Browser Dashboard
+    -> FastAPI (/repositories, /search, /chat, /review)
+        -> SQLite metadata
+        -> FAISS vectors
+        -> Ollama local LLM
 ```
+
+## API Overview
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /repositories` | Register repository |
+| `POST /repositories/{id}/index` | Run indexer |
+| `POST /embeddings/repositories/{id}` | Build vectors |
+| `POST /search` | Semantic code search |
+| `POST /chat` | Repository Q&A |
+| `GET /insights/duplicates` | Duplicate detection |
+| `POST /review/pull-request` | PR diff analysis |
+| `GET /review/repositories/{id}/architecture` | Dependency summary |
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+## Development
+
+```bash
+pytest
+ruff check src tests
+mypy src
+```
+
+## Future Improvements
+
+- Background task queue for large monorepos
+- Multi-language tree-sitter parsers
+- Persistent chat sessions
+- IDE plugin integration
 
 ## License
 

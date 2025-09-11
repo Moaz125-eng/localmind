@@ -8,6 +8,7 @@ from localmind.api.chat import build_chat_router
 from localmind.api.embeddings import build_embedding_router
 from localmind.api.insights import build_insights_router
 from localmind.api.review import build_review_router
+from localmind.dashboard.routes import build_dashboard_router
 from localmind.api.indexing import build_indexing_router
 from localmind.api.search import build_search_router
 from localmind.core.logging import configure_logging, health_payload
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(build_chat_router(settings))
     app.include_router(build_insights_router(database, settings))
     app.include_router(build_review_router(database, settings))
+    app.include_router(build_dashboard_router(settings))
 
     @app.get("/health")
     async def health() -> dict[str, str]:
