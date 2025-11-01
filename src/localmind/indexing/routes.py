@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from localmind.indexing.database import Database
 from localmind.indexing.store import IndexStore, IndexingService
+from localmind.indexing.task_queue import IndexTaskQueue
 
 
 class RegisterRepositoryRequest(BaseModel):
@@ -13,6 +14,20 @@ class RegisterRepositoryRequest(BaseModel):
 
 class IndexRepositoryRequest(BaseModel):
     incremental: bool = True
+
+
+class EnqueueIndexRequest(BaseModel):
+    incremental: bool = True
+    max_attempts: int = Field(default=3, ge=1, le=5)
+
+
+class TaskResponse(BaseModel):
+    id: int
+    repository_id: int
+    status: str
+    attempts: int
+    max_attempts: int
+    last_error: str | None
 
 
 class RepositoryResponse(BaseModel):
@@ -64,3 +79,55 @@ class IndexingRouterFactory:
             await session.commit()
             response = self._to_response(record) if record else None
             return {"stats": stats, "repository": response.model_dump() if response else None}
+
+    async def enqueue_index(self, repository_id: int, payload: EnqueueIndexRequest) -> TaskResponse:
+        async with self.database.session() as session:
+            store = IndexStore(session)
+            repository = await store.get_repository_by_id(repository_id)
+            if repository is None:
+                raise ValueError(f"Repository {repository_id} not found")
+            queue = IndexTaskQueue(session, self.exclude_patterns)
+            task = await queue.enqueue(
+                repository_id,
+                incremental=payload.incremental,
+                max_attempts=payload.max_attempts,
+            )
+            await session.commit()
+            return TaskResponse(
+                id=task.id,
+                repository_id=task.repository_id,
+                status=task.status,
+                attempts=task.attempts,
+                max_attempts=task.max_attempts,
+                last_error=task.last_error,
+            )
+
+    async def run_index_task(self, task_id: int) -> TaskResponse:
+        async with self.database.session() as session:
+            queue = IndexTaskQueue(session, self.exclude_patterns)
+            snapshot = await queue.run_task(task_id)
+            await session.commit()
+            return TaskResponse(
+                id=snapshot.id,
+                repository_id=snapshot.repository_id,
+                status=snapshot.status,
+                attempts=snapshot.attempts,
+                max_attempts=snapshot.max_attempts,
+                last_error=snapshot.last_error,
+            )
+
+    async def list_tasks(self, repository_id: int | None = None) -> list[TaskResponse]:
+        async with self.database.session() as session:
+            queue = IndexTaskQueue(session, self.exclude_patterns)
+            tasks = await queue.list_tasks(repository_id)
+            return [
+                TaskResponse(
+                    id=task.id,
+                    repository_id=task.repository_id,
+                    status=task.status,
+                    attempts=task.attempts,
+                    max_attempts=task.max_attempts,
+                    last_error=task.last_error,
+                )
+                for task in tasks
+            ]
