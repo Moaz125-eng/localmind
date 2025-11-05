@@ -9,6 +9,7 @@ from localmind.api.embeddings import build_embedding_router
 from localmind.api.insights import build_insights_router
 from localmind.api.review import build_review_router
 from localmind.dashboard.routes import build_dashboard_router
+from localmind.api.docs import build_docs_router
 from localmind.api.indexing import build_indexing_router
 from localmind.api.search import build_search_router
 from localmind.core.logging import configure_logging, health_payload
