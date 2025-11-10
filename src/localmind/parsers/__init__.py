@@ -1,4 +1,5 @@
 from localmind.parsers.analyzer import RepositoryAnalyzer
+from localmind.parsers.call_graph import CallGraphBuilder
 from localmind.parsers.import_graph import DependencyGraphBuilder
 from localmind.parsers.python_ast import PythonModuleAnalyzer
 
