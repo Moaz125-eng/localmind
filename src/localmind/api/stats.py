@@ -22,4 +22,18 @@ def build_stats_router(database: Database) -> APIRouter:
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @router.get("/repositories/{repository_id}/snapshot")
+    async def export_snapshot(repository_id: int) -> dict[str, object]:
+        from localmind.indexing.snapshot import SnapshotExporter
+        import json
+
+        async with database.session() as session:
+            exporter = SnapshotExporter(session)
+            try:
+                snapshot = await exporter.export(repository_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            payload = json.loads(exporter.to_json(snapshot))
+        return payload
+
     return router
