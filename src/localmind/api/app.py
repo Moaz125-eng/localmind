@@ -13,8 +13,10 @@ from localmind.api.docs import build_docs_router
 from localmind.api.indexing import build_indexing_router
 from localmind.api.saved_search import build_saved_search_router
 from localmind.api.runtime import build_runtime_router
+from localmind.api.stats import build_stats_router
 from localmind.api.search import build_search_router
 from localmind.core.logging import configure_logging, health_payload
+from localmind.core.middleware import RequestLoggingMiddleware
 from localmind.core.settings import Settings
 from localmind.indexing.database import Database
 from localmind.indexing.routes import IndexingRouterFactory
@@ -33,6 +35,7 @@ def create_app() -> FastAPI:
         yield
 
     app = FastAPI(title="LocalMind", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(RequestLoggingMiddleware)
     app.state.settings = settings
     app.state.database = database
     app.include_router(
@@ -48,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(build_insights_router(database, settings))
     app.include_router(build_review_router(database, settings))
     app.include_router(build_dashboard_router(settings))
+    app.include_router(build_stats_router(database))
 
     @app.get("/health")
     async def health() -> dict[str, str]:
